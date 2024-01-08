@@ -10,27 +10,26 @@ import (
 	"time"
 )
 
-func scanPort(hostname string, port int, wg *sync.WaitGroup, progress, openPorts chan int) {
-	defer wg.Done()
-	progress <- port
-	address := fmt.Sprintf("%s:%d", hostname, port)
-	conn, err := net.DialTimeout("tcp", address, time.Second)
-	if err != nil {
-		return
-	}
-	defer conn.Close()
-	openPorts <- port
+type PortStatus struct {
+	Port int
+	Open bool
 }
 
-func printProgres(totalPorts int, progress chan int) {
-	var progressMutex sync.Mutex
-	scannedPorts := make(map[int]struct{})
-	for port := range progress {
-		progressMutex.Lock()
-		scannedPorts[port] = struct{}{}
-		fmt.Printf("\rProgress: %d/%d ports scanned", len(scannedPorts), totalPorts)
-		progressMutex.Unlock()
+func scanPort(hostname string, port int, wg *sync.WaitGroup, resultChan chan PortStatus) {
+	wg.Add(1)
+	defer wg.Done()
+
+	var portStatus PortStatus
+	portStatus.Port = port
+
+	address := fmt.Sprintf("%s:%d", hostname, port)
+	conn, err := net.DialTimeout("tcp", address, time.Second)
+	if err == nil {
+		portStatus.Open = true
+		conn.Close()
 	}
+
+	resultChan <- portStatus
 }
 
 func isValidHostname(hostname string) bool {
@@ -45,30 +44,31 @@ func isValidHostname(hostname string) bool {
 
 func GetOpenPorts(hostname string) []int {
 	var wg sync.WaitGroup
-	var openPortsListMutex sync.Mutex
+	var openPortsMutex sync.Mutex
 
 	totalPorts := 65535
 	openPortsList := make([]int, 0, totalPorts)
-
-	wg.Add(totalPorts)
-	progress := make(chan int)
-	openPorts := make(chan int)
+	resultChan := make(chan PortStatus)
 
 	for port := 1; port <= totalPorts; port++ {
-		go scanPort(hostname, port, &wg, progress, openPorts)
+		go scanPort(hostname, port, &wg, resultChan)
 	}
-	go printProgres(totalPorts, progress)
+
 	go func() {
-		for port := range openPorts {
-			openPortsListMutex.Lock()
-			openPortsList = append(openPortsList, port)
-			openPortsListMutex.Unlock()
+		scannedPorts := make(map[int]struct{})
+		for portStatus := range resultChan {
+			openPortsMutex.Lock()
+			if portStatus.Open {
+				openPortsList = append(openPortsList, portStatus.Port)
+			}
+			scannedPorts[portStatus.Port] = struct{}{}
+			fmt.Printf("\rProgress: %d/%d ports scanned", len(scannedPorts), totalPorts)
+			openPortsMutex.Unlock()
 		}
 	}()
 
 	wg.Wait()
-	close(progress)
-	close(openPorts)
+	close(resultChan)
 
 	sort.Ints(openPortsList)
 	return openPortsList
@@ -77,7 +77,7 @@ func GetOpenPorts(hostname string) []int {
 func main() {
 	args := os.Args
 	if !(len(args) > 1 && isValidHostname(args[1])) {
-		fmt.Println("The hostname argument is missing or invalid.")
+		fmt.Println("Please provide a valid hostname.")
 		return
 	}
 

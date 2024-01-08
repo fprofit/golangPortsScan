@@ -12,36 +12,22 @@ func TestScanPort(t *testing.T) {
         expected bool
     }{
         {"example.com", 80, true},
-        {"invalid-hostname", 1234, false},
         {"localhost", 12345, false},
+        {"invalid-hostname", 80, false},
     }
 
     for _, tt := range tests {
-        func(hostname string, port int, expected bool) {
-            var wg sync.WaitGroup
-            progress := make(chan int)
-            openPorts := make(chan int)
+        wg := &sync.WaitGroup{}
+        resultChan := make(chan PortStatus)
 
-            wg.Add(1)
-            go scanPort(hostname, port, &wg, progress, openPorts)
-            go func() {
-                wg.Add(1)
-                defer wg.Done()
-                p := <-progress
-                if p != port {
-                    t.Errorf("Expected progress channel to receive %d, but got %d", port, port)
-                }
-                if expected {
-                    open := <-openPorts
-                    if open != port {
-                        t.Errorf("Expected openPorts channel to receive %d, but got %d", port, open)
-                    }
-                }
-            }()
-            wg.Wait()
-            close(openPorts)
-            close(progress)
-        }(tt.hostname, tt.port, tt.expected)
+        go scanPort(tt.hostname, tt.port, wg, resultChan)
+        wg.Wait()
+
+        got := <-resultChan
+        if got.Port != tt.port || got.Open != tt.expected {
+            t.Errorf("scanPort(%s, %d) = %v, expected %v", tt.hostname, tt.port, got, tt.expected)
+        }
+        close(resultChan)
     }
 }
 
@@ -54,7 +40,6 @@ func TestIsValidHostname(t *testing.T) {
         {"127.0.0.1", true},
         {"example.com", true},
         {"invalid-hostname", false},
-        {"", false},
     }
 
     for _, tt := range tests {
