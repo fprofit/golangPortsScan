@@ -26,7 +26,9 @@ func scanPort(hostname string, port int, wg *sync.WaitGroup, resultChan chan Por
 	conn, err := net.DialTimeout("tcp", address, time.Second)
 	if err == nil {
 		portStatus.Open = true
-		conn.Close()
+		if conn != nil {
+			conn.Close()
+		}
 	}
 
 	resultChan <- portStatus
