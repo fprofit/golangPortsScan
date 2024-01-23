@@ -59,7 +59,6 @@ func GetOpenPorts(hostname string) []int {
 	go func() {
 		scannedPorts := make(map[int]struct{}, totalPorts)
 		for portStatus := range resultChan {
-			wg.Done()
 			openPortsMutex.Lock()
 			if portStatus.Open {
 				openPortsList = append(openPortsList, portStatus.Port)
@@ -67,6 +66,7 @@ func GetOpenPorts(hostname string) []int {
 			scannedPorts[portStatus.Port] = struct{}{}
 			fmt.Printf("\rProgress: %d/%d ports scanned", len(scannedPorts), totalPorts)
 			openPortsMutex.Unlock()
+			wg.Done()
 		}
 	}()
 
