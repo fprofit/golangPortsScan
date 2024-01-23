@@ -48,17 +48,18 @@ func GetOpenPorts(hostname string) []int {
 	var openPortsMutex sync.Mutex
 
 	totalPorts := 65535
-	wg.Add(totalPorts)
+	wg.Add(totalPorts * 2)
 	openPortsList := make([]int, 0, totalPorts)
-	resultChan := make(chan PortStatus)
+	resultChan := make(chan PortStatus, totalPorts)
 
 	for port := 1; port <= totalPorts; port++ {
 		go scanPort(hostname, port, &wg, resultChan)
 	}
 
 	go func() {
-		scannedPorts := make(map[int]struct{})
+		scannedPorts := make(map[int]struct{}, totalPorts)
 		for portStatus := range resultChan {
+			wg.Done()
 			openPortsMutex.Lock()
 			if portStatus.Open {
 				openPortsList = append(openPortsList, portStatus.Port)
