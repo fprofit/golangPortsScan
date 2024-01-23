@@ -16,7 +16,6 @@ type PortStatus struct {
 }
 
 func scanPort(hostname string, port int, wg *sync.WaitGroup, resultChan chan PortStatus) {
-	wg.Add(1)
 	defer wg.Done()
 
 	var portStatus PortStatus
@@ -49,6 +48,7 @@ func GetOpenPorts(hostname string) []int {
 	var openPortsMutex sync.Mutex
 
 	totalPorts := 65535
+	wg.Add(totalPorts)
 	openPortsList := make([]int, 0, totalPorts)
 	resultChan := make(chan PortStatus)
 
