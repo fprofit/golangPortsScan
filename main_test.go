@@ -1,7 +1,7 @@
 package main
 
 import (
-    "sync"
+    // "sync"
     "testing"
 )
 
@@ -17,17 +17,17 @@ func TestScanPort(t *testing.T) {
     }
 
     for _, tt := range tests {
-        wg := &sync.WaitGroup{}
         resultChan := make(chan PortStatus)
+        sem := make(chan struct{}, 2)
 
-        go scanPort(tt.hostname, tt.port, wg, resultChan)
-        wg.Wait()
+        go scanPort(tt.hostname, tt.port, sem, resultChan)
 
         got := <-resultChan
         if got.Port != tt.port || got.Open != tt.expected {
             t.Errorf("scanPort(%s, %d) = %v, expected %v", tt.hostname, tt.port, got, tt.expected)
         }
         close(resultChan)
+        close(sem)
     }
 }
 
